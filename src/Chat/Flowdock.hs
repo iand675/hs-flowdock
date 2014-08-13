@@ -4,7 +4,46 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Chat.Flowdock where
+{-| A client library for the Flowdock API. Currently only implements
+    the push API.
+ -}
+module Chat.Flowdock (
+  -- * Using the client
+  -- $client
+  FlowdockClient,
+  withFlowdockClient,
+  -- ** Authentication types
+  -- $auth
+  Push(..),
+  -- ** Pushing messages to the inbox
+  pushToInbox,
+  newInboxPushMessage,
+  -- ** Pushing messages to the chatroom
+  pushToChat,
+  newChatPushMessage,
+  -- ** Constructing messages
+  -- *** InboxPushMessage fields
+  InboxPushMessage,
+  source,
+  fromAddress,
+  subject,
+  fromName,
+  replyTo,
+  project,
+  InboxPushFormat(..),
+  format,
+  link,
+  -- *** ChatPushMessage fields
+  ChatPushMessage,
+  externalUserName,
+  messageId,
+  -- *** Common fields
+  content,
+  Tag(..),
+  tags,
+  -- *** Exception types
+  JSONError(..)
+) where
 import Control.Exception
 import Control.Monad
 import Control.Lens hiding ((.=))
@@ -65,6 +104,23 @@ listFiles
 uploadFile
 -}
 
+-- $client
+--
+-- The Flowdock API has different authentication mechanisms
+-- for different parts of the API. Functions that depend on
+-- specific authentication data are tagged with the authentication
+-- type necessary to use them.
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- >
+-- > import Chat.Flowdock
+-- > 
+-- > -- The push API uses the 'Push' authentication type
+-- > main = withFlowdockClient (Push "YOUR_FLOW_TOKEN_HERE") $ \client -> do
+-- >   let msg = newChatPushMessage "Hello World Bot" "Hello, world!"
+-- >   pushToChat msg
+-- >
+
 data JSONError = JSONError String
   deriving (Show, Typeable)
 
@@ -76,7 +132,7 @@ addPath p r = r { path = path r <> p }
 flowdockApiBaseRequest = let (Just r) = parseUrl "https://api.flowdock.com/v1/" in r { requestHeaders = ("Content-Type", "application/json") : requestHeaders r }
 
 -- Push API
-newtype Push = Push { flowApiToken :: Text }
+newtype Push = Push { pushFlowApiToken :: Text }
 
 data FlowdockClient a = FlowdockClient
   { clientAuth    :: a
@@ -112,7 +168,7 @@ data InboxPushMessage = InboxPushMessage
   , _ipLink        :: Maybe Text
   } deriving (Read, Show)
 
-newInboxMessage = InboxPushMessage "" "" "" "" Nothing Nothing Nothing (Just Html) Nothing Nothing
+newInboxPushMessage = InboxPushMessage "" "" "" "" Nothing Nothing Nothing (Just Html) Nothing Nothing
 
 makeFields ''InboxPushMessage
 jsonizeToSnake ''InboxPushMessage
@@ -135,6 +191,12 @@ data ChatPushMessage = ChatPushMessage
 
 makeFields ''ChatPushMessage
 jsonizeToSnake ''ChatPushMessage
+
+type Content = Text
+type ExternalUserName = Text
+
+newChatPushMessage :: ExternalUserName -> Content -> ChatPushMessage
+newChatPushMessage eun c = ChatPushMessage c eun Nothing Nothing
 
 pushToChat :: FlowdockClient Push -> ChatPushMessage -> IO ()
 pushToChat (FlowdockClient (Push token) man) msg = do
