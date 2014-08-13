@@ -20,6 +20,8 @@ module Chat.Flowdock (
   newInboxPushMessage,
   -- ** Pushing messages to the chatroom
   pushToChat,
+  Content,
+  ExternalUserName,
   newChatPushMessage,
   -- ** Constructing messages
   -- *** InboxPushMessage fields
