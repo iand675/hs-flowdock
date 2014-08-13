@@ -120,7 +120,7 @@ uploadFile
 -- > -- The push API uses the 'Push' authentication type
 -- > main = withFlowdockClient (Push "YOUR_FLOW_TOKEN_HERE") $ \client -> do
 -- >   let msg = newChatPushMessage "Hello World Bot" "Hello, world!"
--- >   pushToChat msg
+-- >   pushToChat client msg
 -- >
 
 data JSONError = JSONError String
