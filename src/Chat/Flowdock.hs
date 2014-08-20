@@ -23,6 +23,7 @@ module Chat.Flowdock (
   flow,
   organization,
   -- ** REST API
+  MessageType,
   Message,
   flow,
   event,
