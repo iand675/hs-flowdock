@@ -1,11 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-| A client library for the Flowdock API. Currently only implements
     the push API.
  -}
@@ -19,12 +19,15 @@ module Chat.Flowdock (
   Push(..),
   User(..),
   -- ** General types
-  QualifiedFlow,
+  Flow(..),
   flow,
   organization,
   -- ** REST API
   MessageType,
   Message,
+  MessageId(..),
+  message,
+  comment,
   flow,
   event,
   tags,
@@ -63,6 +66,7 @@ module Chat.Flowdock (
   user,
   Event,
   active,
+  streamOptions,
   streamFlow,
   streamFlows,
   -- ** Constructing messages
@@ -111,32 +115,32 @@ module Chat.Flowdock (
   HasUser,
   HasUuid
 ) where
-import Control.Applicative
-import Control.Exception
-import Control.Monad
-import Control.Lens hiding ((.=))
-import Control.Lens.TH
-import Data.Aeson
-import Data.Aeson.TH
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BC
+import           Control.Applicative
+import           Control.Exception
+import           Control.Lens           hiding ((.=))
+import           Control.Lens.TH
+import           Control.Monad
+import           Data.Aeson
+import           Data.Aeson.TH
+import           Data.ByteString        (ByteString)
 import qualified Data.ByteString.Base64 as B64
-import Data.ByteString.Lazy (fromChunks)
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
-import Data.Maybe
-import Data.Monoid
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Data.Typeable
-import Data.UUID
-import Pipes
-import qualified Pipes.Aeson as A
-import Pipes.HTTP
-import Pipes.Parse
+import qualified Data.ByteString.Char8  as BC
+import           Data.ByteString.Lazy   (fromChunks)
+import           Data.HashMap.Strict    (HashMap)
+import qualified Data.HashMap.Strict    as HM
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Text              (Text)
+import qualified Data.Text              as T
+import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
+import           Data.Typeable
+import           Data.UUID
+import           Pipes
+import qualified Pipes.Aeson            as A
+import           Pipes.HTTP
+import           Pipes.Parse
 
-import Chat.Flowdock.Internal
+import           Chat.Flowdock.Internal
 -- REST API
 {-
 listUserFlows
@@ -153,10 +157,12 @@ newtype WrapUUID = Wrap UUID
 instance ToJSON WrapUUID where
   toJSON (Wrap u) = String $ decodeUtf8 $ toASCIIBytes u
 
-data QualifiedFlow = QualifiedFlow
-  { _qfOrganization :: Text
-  , _qfFlow         :: Text
-  }
+data Flow
+  = QualifiedFlow
+    { _qfOrganization :: Text
+    , _qfFlow         :: Text
+    }
+  | FlowId Text
 
 data Tag = UserTag Text | HashTag Text
   deriving (Read, Show)
@@ -166,7 +172,7 @@ instance ToJSON Tag where
   toJSON (HashTag t) = String ("#" <> t)
 
 data Message a = Message
-  { _mFlow             :: QualifiedFlow 
+  { _mFlow             :: Flow
   , _mEvent            :: a
   , _mTags             :: [Tag]
   , _mExternalUserName :: Maybe Text
@@ -187,34 +193,40 @@ newtype MessageId = MessageId Int
   deriving (Show, ToJSON, FromJSON)
 
 data Comment = Comment
-  { _commentContent :: Text
+  { _commentContent   :: Text
   , _commentMessageId :: MessageId
   }
+
+message qf e = Message qf e [] Nothing Nothing
+
+comment = Comment
 
 data Status = Status
   { _statusContent :: Text
   }
+
 type Event = Object
 
-newtype FlowFilter = FlowFilter (Maybe [QualifiedFlow])
+newtype FlowFilter = FlowFilter (Maybe [Flow])
 
 data StreamQuery a = StreamQuery
-  { _sqSource  :: a
-  , _sqUser    :: Maybe Bool
-  , _sqActive  :: Maybe Bool
+  { _sqSource :: a
+  , _sqUser   :: Maybe Bool
+  , _sqActive :: Maybe Bool
   }
 
-data MessageResponse = MessageResponse
+data MessageResponse c = MessageResponse
   { _mrMessageId :: MessageId
   , _mrSent      :: Int
   , _mrApp       :: Text
+  -- , _mr
   } deriving (Show)
 
-instance FromJSON MessageResponse where
+instance FromJSON (MessageResponse r) where
   parseJSON (Object o) = MessageResponse <$> (MessageId <$> o .: "id") <*> o .: "sent" <*> o .: "app"
   parseJSON _ = mzero
 
-makeFields ''QualifiedFlow
+makeFields ''Flow
 makeFields ''Message
 makeFields ''Chat
 makeFields ''FileUpload
@@ -226,7 +238,7 @@ makeFields ''MessageResponse
 class StreamParams a where
   streamParams :: a -> [(ByteString, Maybe ByteString)]
 
-instance StreamParams QualifiedFlow where
+instance StreamParams Flow where
   streamParams = const []
 
 instance StreamParams FlowFilter where
@@ -252,7 +264,7 @@ instance MessageType FileUpload where
   messageJSON m = Object . HM.insert "content" co $ baseMessage "file" m
     where
       e = m ^. event
-      co = object [ "data" .= (decodeUtf8 $ B64.encode (e ^. content))
+      co = object [ "data" .= decodeUtf8 (B64.encode (e ^. content))
                   , "content_type" .= (e ^. contentType)
                   , "file_name" .= (e ^. fileName)
                   ]
@@ -319,10 +331,12 @@ type Content = Text
 type ExternalUserName = Text
 
 baseMessage :: Text -> Message a -> HashMap Text Value
-baseMessage e m = HM.fromList $ (("event", String e) : ("tags", m ^. tags . to (toJSON)) : catMaybes [mk externalUserName "external_user_name", mk (uuid . _Just . to Wrap) "uuid"])
+baseMessage e m = HM.fromList (("event", String e) : ("tags", m ^. tags . to toJSON) : catMaybes [mk externalUserName "external_user_name", mk (uuid . _Just . to Wrap) "uuid"])
   where
     mk l k = preview (l . jk k) m
     jk k = to (\x -> (k, toJSON x))
+
+
 
 {-
 listMessages
@@ -367,7 +381,7 @@ uploadFile
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- >
 -- > import Chat.Flowdock
--- > 
+-- >
 -- > -- The push API uses the 'Push' authentication type
 -- > main = withFlowdockClient (Push "YOUR_FLOW_TOKEN_HERE") $ \client -> do
 -- >   let msg = newChatPushMessage "Hello World Bot" "Hello, world!"
@@ -383,7 +397,7 @@ decodeAesonStream br = do
 withFlowdockClient :: ClientManagerSettings auth => auth -> (FlowdockClient auth -> IO a) -> IO a
 withFlowdockClient a f = withManager (managerSettings a) $ \m -> f (FlowdockClient a m)
 
-sendMessage :: MessageType a => FlowdockClient User -> Message a -> IO MessageResponse
+sendMessage :: MessageType a => FlowdockClient User -> Message a -> IO (MessageResponse a)
 sendMessage (FlowdockClient (User token) man) m = do
   let req = applyBasicAuth (encodeUtf8 token) "" $ (addPath ("flows/" <> (m ^. flow . organization . to encodeUtf8) <> "/" <> (m ^. flow . flow . to encodeUtf8) <> "/messages") flowdockRestBaseRequest)
               { method = "POST"
@@ -391,7 +405,7 @@ sendMessage (FlowdockClient (User token) man) m = do
               }
   withResponse req man (decodeAesonStream . responseBody)
 
-sendComment :: FlowdockClient User -> Message Comment -> IO MessageResponse
+sendComment :: FlowdockClient User -> Message Comment -> IO (MessageResponse Comment)
 sendComment (FlowdockClient (User token) man) m = do
   let req = applyBasicAuth (encodeUtf8 token) "" $ (addPath ("flows/" <> (m ^. flow . organization . to encodeUtf8) <> "/" <> (m ^. flow . flow . to encodeUtf8) <> "/messages/" <> (m ^. event . messageId . to (\(MessageId i) -> BC.pack (show i))) <> "/comments") flowdockRestBaseRequest)
               { method = "POST"
@@ -445,13 +459,13 @@ streamQueryString q = streamParams (q ^. source) ++ catMaybes [aq, uq]
 allFlows :: FlowFilter
 allFlows = FlowFilter Nothing
 
-justFlows :: [QualifiedFlow] -> FlowFilter
+justFlows :: [Flow] -> FlowFilter
 justFlows = FlowFilter . Just
 
 streamOptions :: a -> StreamQuery a
 streamOptions x = StreamQuery x Nothing Nothing
 
-streamFlow :: FlowdockClient User -> StreamQuery QualifiedFlow -> (Producer Event IO () -> IO a) -> IO a
+streamFlow :: FlowdockClient User -> StreamQuery Flow -> (Producer Event IO () -> IO a) -> IO a
 streamFlow (FlowdockClient (User token) man) q cb = do
   let req = applyBasicAuth (encodeUtf8 token) "" $ addPath ("flows/" <> org <> "/" <> flow) flowdockStreamBaseRequest
   withHTTP req man $ \r -> do
@@ -490,3 +504,5 @@ streamJSON = go
           go p'
 
 
+getParentMessageId :: MessageResponse Comment -> MessageId
+getParentMessageId = undefined
