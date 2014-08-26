@@ -3,23 +3,28 @@ module Chat.Flowdock.Internal where
 import Control.Lens
 import Data.Aeson.TH
 import Data.Char
-import Data.Maybe
 import Language.Haskell.TH.Syntax (Q, Name, Dec)
 
+adjustNames :: String -> String
+adjustNames = snakeCase . dropWhile (not . isUpper)
+
 jsonize :: Name -> Q [Dec]
-jsonize = deriveJSON (defaultOptions { fieldLabelModifier = \x -> let (FieldRules _ _ f _) = defaultFieldRules in fromMaybe x $ f x
+jsonize = deriveJSON (defaultOptions { fieldLabelModifier = adjustNames 
                                      , omitNothingFields = True })
 
 jsonizeAll :: (Traversable t) => MonadicFold Q (t Name) [Dec]
 jsonizeAll = traverse . act jsonize
 
+snakeCase :: String -> String
 snakeCase (a:b:c) | isAlpha a, isUpper b = a : '_' : snakeCase (toLower b : c)
 snakeCase (a:b) = a : snakeCase b
 snakeCase x = x
 
-jsonizeSnake = deriveJSON (defaultOptions { fieldLabelModifier = \x -> let (FieldRules _ _ f _) = defaultFieldRules in maybe (snakeCase x) snakeCase $ f x
+jsonizeSnake :: Name -> Q [Dec]
+jsonizeSnake = deriveJSON (defaultOptions { fieldLabelModifier = adjustNames
                                           , omitNothingFields = True })
 
-jsonizeToSnake = deriveToJSON (defaultOptions { fieldLabelModifier = \x -> let (FieldRules _ _ f _) = defaultFieldRules in maybe (snakeCase x) snakeCase $ f x
+jsonizeToSnake :: Name -> Q [Dec]
+jsonizeToSnake = deriveToJSON (defaultOptions { fieldLabelModifier = adjustNames
                                               , omitNothingFields = True })
 
