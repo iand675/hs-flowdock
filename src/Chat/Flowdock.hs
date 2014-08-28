@@ -135,6 +135,7 @@ import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Data.Typeable
 import           Data.UUID
+import qualified Network.Socket         as S
 import           Pipes
 import qualified Pipes.Aeson            as A
 import           Pipes.HTTP
@@ -320,7 +321,8 @@ instance ClientManagerSettings Push where
   managerSettings = const tlsManagerSettings
 
 instance ClientManagerSettings User where
-  managerSettings = const (tlsManagerSettings { managerResponseTimeout = Nothing })
+  managerSettings = const (tlsManagerSettings { managerResponseTimeout = Nothing
+                                              , managerRawConnection = rawConnectionModifySocket (\s -> S.setSocketOption s S.KeepAlive 1) })
 
 data FlowdockClient a = FlowdockClient
   { clientAuth    :: a
