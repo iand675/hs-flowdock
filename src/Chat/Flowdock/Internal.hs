@@ -1,15 +1,17 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Chat.Flowdock.Internal where
-import Control.Lens
-import Data.Aeson.TH
-import Data.Char
-import Language.Haskell.TH.Syntax (Q, Name, Dec)
+import           Control.Lens
+import           Data.Aeson.TH
+import           Data.Char
+import           Language.Haskell.TH.Syntax (Dec, Name, Q)
 
 adjustNames :: String -> String
-adjustNames = snakeCase . dropWhile (not . isUpper)
+adjustNames s = case snakeCase $ dropWhile (not . isUpper) s of
+  [] -> []
+  (x:xs) -> toLower x : xs
 
 jsonize :: Name -> Q [Dec]
-jsonize = deriveJSON (defaultOptions { fieldLabelModifier = adjustNames 
+jsonize = deriveJSON (defaultOptions { fieldLabelModifier = adjustNames
                                      , omitNothingFields = True })
 
 jsonizeAll :: (Traversable t) => MonadicFold Q (t Name) [Dec]
