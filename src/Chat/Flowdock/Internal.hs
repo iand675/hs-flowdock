@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Chat.Flowdock.Internal where
 import           Control.Lens
+import           Control.Lens.Action
 import           Data.Aeson.TH
 import           Data.Char
 import           Language.Haskell.TH.Syntax (Dec, Name, Q)

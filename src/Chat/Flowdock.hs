@@ -160,8 +160,8 @@ instance ToJSON WrapUUID where
 
 data Flow
   = QualifiedFlow
-    { _qfOrganization :: Text
-    , _qfFlow         :: Text
+    { flowOrganization :: Text
+    , flowFlow         :: Text
     }
   | FlowId Text
 
@@ -173,29 +173,29 @@ instance ToJSON Tag where
   toJSON (HashTag t) = String ("#" <> t)
 
 data Message a = Message
-  { _mFlow             :: Flow
-  , _mEvent            :: a
-  , _mTags             :: [Tag]
-  , _mExternalUserName :: Maybe Text
-  , _mUuid             :: Maybe UUID
+  { messageFlow             :: Flow
+  , messageEvent            :: a
+  , messageTags             :: [Tag]
+  , messageExternalUserName :: Maybe Text
+  , messageUuid             :: Maybe UUID
   }
 
 data Chat = Chat
-  { _chatContent :: Text
+  { chatContent :: Text
   }
 
 data FileUpload = FileUpload
-  { _fContent     :: ByteString
-  , _fContentType :: Text
-  , _fFileName    :: Text
+  { fileUploadContent     :: ByteString
+  , fileUploadContentType :: Text
+  , fileUploadFileName    :: Text
   }
 
 newtype MessageId = MessageId Int
   deriving (Show, ToJSON, FromJSON)
 
 data Comment = Comment
-  { _commentContent   :: Text
-  , _commentMessageId :: MessageId
+  { commentContent   :: Text
+  , commentMessageId :: MessageId
   }
 
 message qf e = Message qf e [] Nothing Nothing
@@ -203,7 +203,7 @@ message qf e = Message qf e [] Nothing Nothing
 comment = Comment
 
 data Status = Status
-  { _statusContent :: Text
+  { statusContent :: Text
   }
 
 type Event = Object
@@ -211,15 +211,15 @@ type Event = Object
 newtype FlowFilter = FlowFilter (Maybe [Flow])
 
 data StreamQuery a = StreamQuery
-  { _sqSource :: a
-  , _sqUser   :: Maybe Bool
-  , _sqActive :: Maybe Bool
+  { streamQuerySource :: a
+  , streamQueryUser   :: Maybe Bool
+  , streamQueryActive :: Maybe Bool
   }
 
 data MessageResponse c = MessageResponse
-  { _mrMessageId :: MessageId
-  , _mrSent      :: Int
-  , _mrApp       :: Text
+  { messageResponseMessageId :: MessageId
+  , messageResponseSent      :: Int
+  , messageResponseApp       :: Text
   -- , _mr
   } deriving (Show)
 
@@ -277,23 +277,23 @@ instance ToJSON InboxPushFormat where
   toJSON = const $ String "html"
 
 data InboxPushMessage = InboxPushMessage
-  { _ipSource      :: Text
-  , _ipFromAddress :: Text
-  , _ipSubject     :: Text
-  , _ipContent     :: Text
-  , _ipFromName    :: Maybe Text
-  , _ipReplyTo     :: Maybe Text
-  , _ipProject     :: Maybe Text
-  , _ipFormat      :: Maybe InboxPushFormat
-  , _ipTags        :: Maybe [Tag]
-  , _ipLink        :: Maybe Text
+  { inboxPushMessageSource      :: Text
+  , inboxPushMessageFromAddress :: Text
+  , inboxPushMessageSubject     :: Text
+  , inboxPushMessageContent     :: Text
+  , inboxPushMessageFromName    :: Maybe Text
+  , inboxPushMessageReplyTo     :: Maybe Text
+  , inboxPushMessageProject     :: Maybe Text
+  , inboxPushMessageFormat      :: Maybe InboxPushFormat
+  , inboxPushMessageTags        :: Maybe [Tag]
+  , inboxPushMessageLink        :: Maybe Text
   } deriving (Read, Show)
 
 data ChatPushMessage = ChatPushMessage
-  { _cpContent          :: Text
-  , _cpExternalUserName :: Text
-  , _cpTags             :: Maybe [Tag]
-  , _cpMessageId        :: Maybe Text
+  { chatPushMessageContent          :: Text
+  , chatPushMessageExternalUserName :: Text
+  , chatPushMessageTags             :: Maybe [Tag]
+  , chatPushMessageMessageId        :: Maybe Text
   } deriving (Read, Show)
 
 data JSONError = JSONError String
@@ -474,8 +474,8 @@ streamFlow (FlowdockClient (User token) man) q cb = do
     let responseStream = responseBody r
     cb $ streamJSON responseStream
   where
-    org  = encodeUtf8 $ _qfOrganization $ _sqSource q
-    flow = encodeUtf8 $ _qfFlow $ _sqSource q
+    org  = encodeUtf8 $ flowOrganization $ streamQuerySource q
+    flow = encodeUtf8 $ flowOrganization $ streamQuerySource q
 
 streamFlows :: FlowdockClient User -> StreamQuery FlowFilter -> (Producer Event IO () -> IO a) -> IO a
 streamFlows (FlowdockClient (User token) man) q cb = do
@@ -506,5 +506,5 @@ streamJSON = go
           go p'
 
 
-getParentMessageId :: MessageResponse Comment -> MessageId
-getParentMessageId = undefined
+-- getParentMessageId :: MessageResponse Comment -> MessageId
+-- getParentMessageId = undefined
